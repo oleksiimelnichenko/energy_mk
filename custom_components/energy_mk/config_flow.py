@@ -5,6 +5,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
 from .const import (
     API_URL,
@@ -13,6 +14,7 @@ from .const import (
     DEFAULT_QUEUE_ID,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    QUEUE_NAMES,
 )
 
 
@@ -25,6 +27,7 @@ class EnergyMkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input[CONF_QUEUE_ID] = int(user_input[CONF_QUEUE_ID])
             session = async_get_clientsession(self.hass)
             try:
                 async with session.get(API_URL, timeout=10) as resp:
@@ -35,14 +38,23 @@ class EnergyMkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 queue_id = user_input[CONF_QUEUE_ID]
                 await self.async_set_unique_id(f"energy_mk_{queue_id}")
                 self._abort_if_unique_id_configured()
+                queue_name = QUEUE_NAMES.get(queue_id, str(queue_id))
                 return self.async_create_entry(
-                    title=f"Energy MK (queue {queue_id})",
+                    title=f"Energy MK queue {queue_name}",
                     data=user_input,
                 )
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_QUEUE_ID, default=DEFAULT_QUEUE_ID): int,
+                vol.Required(CONF_QUEUE_ID, default=str(DEFAULT_QUEUE_ID)): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            {"value": str(qid), "label": name}
+                            for qid, name in QUEUE_NAMES.items()
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Required(
                     CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
                 ): vol.All(int, vol.Range(min=5, max=1440)),
