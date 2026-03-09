@@ -23,6 +23,14 @@ def _slot_to_time(slot_id: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
+def _next_outage_slot(slot_map: dict[int, str], current_slot: int) -> int | None:
+    for offset in range(1, 49):
+        slot_id = current_slot + offset
+        if slot_map.get(slot_id) in ("OFF", "PROBABLY_OFF"):
+            return slot_id
+    return None
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -84,7 +92,13 @@ class EnergyMkStatusSensor(CoordinatorEntity, SensorEntity):
                         "type": window_type,
                     }
                 )
-        return {"schedule": windows, "queue": self.coordinator.queue_id}
+        next_slot = _next_outage_slot(slot_map, _current_slot_id(dt_util.now()))
+        next_outage_time = _slot_to_time(next_slot) if next_slot is not None else None
+        return {
+            "schedule": windows,
+            "queue": self.coordinator.queue_id,
+            "next_outage_time": next_outage_time,
+        }
 
 
 class EnergyMkNextOutageSensor(CoordinatorEntity, SensorEntity):
@@ -103,11 +117,9 @@ class EnergyMkNextOutageSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> datetime | None:
         slot_map: dict[int, str] = self.coordinator.data or {}
         now = dt_util.now()
-        current_slot = _current_slot_id(now)
-        for offset in range(1, 49):
-            slot_id = current_slot + offset
-            if slot_map.get(slot_id) in ("OFF", "PROBABLY_OFF"):
-                minutes = (slot_id - 1) * SLOT_MINUTES
-                midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                return midnight + timedelta(minutes=minutes)
-        return None
+        slot_id = _next_outage_slot(slot_map, _current_slot_id(now))
+        if slot_id is None:
+            return None
+        minutes = (slot_id - 1) * SLOT_MINUTES
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return midnight + timedelta(minutes=minutes)

@@ -10,3 +10,18 @@ CONF_SCAN_INTERVAL = "scan_interval"
 
 DEFAULT_QUEUE_ID = 22
 DEFAULT_SCAN_INTERVAL = 15  # minutes
+
+QUEUE_NAMES: dict[int, str] = {
+    14: "1.1",
+    15: "1.2",
+    16: "2.1",
+    17: "2.2",
+    19: "3.1",
+    20: "3.2",
+    21: "4.1",
+    22: "4.2",
+    24: "5.1",
+    25: "5.2",
+    26: "6.1",
+    27: "6.2",
+}
