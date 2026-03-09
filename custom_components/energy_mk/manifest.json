@@ -1,0 +1,13 @@
+{
+  "domain": "energy_mk",
+  "name": "Energy MK (Mykolaiv outage schedule)",
+  "version": "1.1.0",
+  "documentation": "https://github.com/oleksiimelnichenko/energy_mk",
+  "issue_tracker": "https://github.com/oleksiimelnichenko/energy_mk/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": [],
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "homeassistant": "2023.1.0"
+}

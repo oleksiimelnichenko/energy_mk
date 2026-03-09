@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy MK — outage schedule",
+        "description": "Connect to off.energy.mk.ua to track the Mykolaiv power outage schedule for your queue.",
+        "data": {
+          "queue_id": "Outage queue ID (number)",
+          "scan_interval": "Update interval (minutes)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to off.energy.mk.ua — check your internet connection."
+    },
+    "abort": {
+      "already_configured": "This queue is already configured."
+    }
+  }
+}
