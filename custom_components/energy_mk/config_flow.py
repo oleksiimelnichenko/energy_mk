@@ -11,8 +11,10 @@ from .const import (
     API_URL,
     CONF_QUEUE_ID,
     CONF_SCAN_INTERVAL,
+    CONF_WARNING_INTERVALS,
     DEFAULT_QUEUE_ID,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WARNING_INTERVALS,
     DOMAIN,
     QUEUE_NAMES,
 )
@@ -28,6 +30,9 @@ class EnergyMkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             user_input[CONF_QUEUE_ID] = int(user_input[CONF_QUEUE_ID])
+            user_input[CONF_WARNING_INTERVALS] = [
+                int(v) for v in user_input.get(CONF_WARNING_INTERVALS, [])
+            ]
             session = async_get_clientsession(self.hass)
             try:
                 async with session.get(API_URL, timeout=10) as resp:
@@ -58,6 +63,21 @@ class EnergyMkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
                 ): vol.All(int, vol.Range(min=5, max=1440)),
+                vol.Required(
+                    CONF_WARNING_INTERVALS,
+                    default=[str(m) for m in DEFAULT_WARNING_INTERVALS],
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            {"value": "15", "label": "15 min"},
+                            {"value": "30", "label": "30 min"},
+                            {"value": "60", "label": "1 hour"},
+                            {"value": "120", "label": "2 hours"},
+                        ],
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
             }
         )
 

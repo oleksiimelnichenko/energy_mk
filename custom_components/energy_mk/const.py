@@ -7,12 +7,16 @@ SLOT_MINUTES = 30
 
 CONF_QUEUE_ID = "queue_id"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_WARNING_INTERVALS = "warning_intervals"
 
 DEFAULT_QUEUE_ID = 22
 DEFAULT_SCAN_INTERVAL = 15  # minutes
+DEFAULT_WARNING_INTERVALS = [30, 60]  # minutes before outage
 
 EVENT_OUTAGE_STARTED = f"{DOMAIN}_outage_started"
 EVENT_POWER_RESTORED = f"{DOMAIN}_power_restored"
+EVENT_OUTAGE_WARNING = f"{DOMAIN}_outage_warning"
+
 
 QUEUE_NAMES: dict[int, str] = {
     14: "1.1",

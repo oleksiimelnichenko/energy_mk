@@ -7,10 +7,20 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import homeassistant.util.dt as dt_util
 
-from .const import DOMAIN, EVENT_OUTAGE_STARTED, EVENT_POWER_RESTORED, QUEUE_NAMES, SLOT_MINUTES
+from .const import (
+    CONF_WARNING_INTERVALS,
+    DEFAULT_WARNING_INTERVALS,
+    DOMAIN,
+    EVENT_OUTAGE_STARTED,
+    EVENT_OUTAGE_WARNING,
+    EVENT_POWER_RESTORED,
+    QUEUE_NAMES,
+    SLOT_MINUTES,
+)
 from .coordinator import EnergyMkCoordinator
 
 
@@ -57,6 +67,32 @@ class EnergyMkStatusSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"Energy MK {queue_name} Status"
         self._attr_unique_id = f"{entry_id}_status"
         self._previous_state: str | None = None
+        self._warning_unsubs: list = []
+
+    def _cancel_warnings(self) -> None:
+        for unsub in self._warning_unsubs:
+            unsub()
+        self._warning_unsubs.clear()
+
+    def _schedule_warnings(self, outage_at: datetime) -> None:
+        self._cancel_warnings()
+        now = dt_util.now()
+        intervals = self.coordinator.config_entry.data.get(
+            CONF_WARNING_INTERVALS, DEFAULT_WARNING_INTERVALS
+        )
+        for minutes in intervals:
+            fire_at = outage_at - timedelta(minutes=minutes)
+            if fire_at > now:
+                self._warning_unsubs.append(
+                    async_track_point_in_time(
+                        self.hass,
+                        lambda _, m=minutes: self.hass.bus.async_fire(
+                            EVENT_OUTAGE_WARNING,
+                            {"queue": self.coordinator.queue_id, "minutes_before": m},
+                        ),
+                        fire_at,
+                    )
+                )
 
     def _handle_coordinator_update(self) -> None:
         new_state = self._compute_state()
@@ -72,6 +108,17 @@ class EnergyMkStatusSensor(CoordinatorEntity, SensorEntity):
                     {"queue": self.coordinator.queue_id},
                 )
         self._previous_state = new_state
+
+        slot_map: dict[int, str] = self.coordinator.data or {}
+        now = dt_util.now()
+        next_slot = _next_outage_slot(slot_map, _current_slot_id(now))
+        if next_slot is not None:
+            midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            outage_at = midnight + timedelta(minutes=(next_slot - 1) * SLOT_MINUTES)
+            self._schedule_warnings(outage_at)
+        else:
+            self._cancel_warnings()
+
         super()._handle_coordinator_update()
 
     def _compute_state(self) -> str:
