@@ -11,6 +11,9 @@ CONF_SCAN_INTERVAL = "scan_interval"
 DEFAULT_QUEUE_ID = 22
 DEFAULT_SCAN_INTERVAL = 15  # minutes
 
+EVENT_OUTAGE_STARTED = f"{DOMAIN}_outage_started"
+EVENT_POWER_RESTORED = f"{DOMAIN}_power_restored"
+
 QUEUE_NAMES: dict[int, str] = {
     14: "1.1",
     15: "1.2",

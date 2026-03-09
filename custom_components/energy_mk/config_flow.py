@@ -40,7 +40,7 @@ class EnergyMkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
                 queue_name = QUEUE_NAMES.get(queue_id, str(queue_id))
                 return self.async_create_entry(
-                    title=f"Energy MK queue {queue_name}",
+                    title=f"Energy MK {queue_name}",
                     data=user_input,
                 )
 

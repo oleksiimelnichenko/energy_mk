@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import homeassistant.util.dt as dt_util
 
-from .const import DOMAIN, SLOT_MINUTES
+from .const import DOMAIN, EVENT_OUTAGE_STARTED, EVENT_POWER_RESTORED, QUEUE_NAMES, SLOT_MINUTES
 from .coordinator import EnergyMkCoordinator
 
 
@@ -53,14 +53,34 @@ class EnergyMkStatusSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: EnergyMkCoordinator) -> None:
         super().__init__(coordinator)
         entry_id = coordinator.config_entry.entry_id
-        self._attr_name = "Energy MK Status"
+        queue_name = QUEUE_NAMES.get(coordinator.queue_id, str(coordinator.queue_id))
+        self._attr_name = f"Energy MK {queue_name} Status"
         self._attr_unique_id = f"{entry_id}_status"
+        self._previous_state: str | None = None
+
+    def _handle_coordinator_update(self) -> None:
+        new_state = self._compute_state()
+        if self._previous_state is not None and new_state != self._previous_state:
+            if new_state in ("OFF", "PROBABLY_OFF"):
+                self.hass.bus.async_fire(
+                    EVENT_OUTAGE_STARTED,
+                    {"queue": self.coordinator.queue_id, "state": new_state},
+                )
+            elif new_state == "ON":
+                self.hass.bus.async_fire(
+                    EVENT_POWER_RESTORED,
+                    {"queue": self.coordinator.queue_id},
+                )
+        self._previous_state = new_state
+        super()._handle_coordinator_update()
+
+    def _compute_state(self) -> str:
+        slot_map: dict[int, str] = self.coordinator.data or {}
+        return slot_map.get(_current_slot_id(dt_util.now()), "ON")
 
     @property
     def native_value(self) -> str:
-        slot_map: dict[int, str] = self.coordinator.data or {}
-        slot = _current_slot_id(dt_util.now())
-        return slot_map.get(slot, "ON")
+        return self._compute_state()
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -110,7 +130,8 @@ class EnergyMkNextOutageSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: EnergyMkCoordinator) -> None:
         super().__init__(coordinator)
         entry_id = coordinator.config_entry.entry_id
-        self._attr_name = "Energy MK Next Outage"
+        queue_name = QUEUE_NAMES.get(coordinator.queue_id, str(coordinator.queue_id))
+        self._attr_name = f"Energy MK {queue_name} Next Outage"
         self._attr_unique_id = f"{entry_id}_next_outage"
 
     @property
