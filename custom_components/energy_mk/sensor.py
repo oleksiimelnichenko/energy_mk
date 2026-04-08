@@ -24,21 +24,32 @@ from .const import (
 from .coordinator import EnergyMkCoordinator
 
 
-def _current_slot_id(local_now: datetime) -> int:
-    return (local_now.hour * 60 + local_now.minute) // SLOT_MINUTES + 1
+def _floor_to_slot(utc: datetime) -> datetime:
+    """Round a UTC datetime down to the nearest slot boundary."""
+    slot_index = (utc.hour * 60 + utc.minute) // SLOT_MINUTES
+    return utc.replace(minute=slot_index * SLOT_MINUTES, second=0, microsecond=0)
 
 
-def _slot_to_time(slot_id: int) -> str:
-    minutes = (slot_id - 1) * SLOT_MINUTES
-    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+def _next_slot_of_type(
+    slot_map: dict[datetime, str],
+    after_utc: datetime,
+    types: tuple[str, ...],
+) -> datetime | None:
+    """Return the earliest future slot matching one of *types*, or None."""
+    candidates = [dt for dt, t in slot_map.items() if dt > after_utc and t in types]
+    return min(candidates) if candidates else None
 
 
-def _next_outage_slot(slot_map: dict[int, str], current_slot: int) -> int | None:
-    for offset in range(1, 49):
-        slot_id = current_slot + offset
-        if slot_map.get(slot_id) in ("OFF", "PROBABLY_OFF"):
-            return slot_id
-    return None
+def _outage_block_end(slot_map: dict[datetime, str], outage_start: datetime) -> datetime:
+    """Return the UTC datetime when the outage block beginning at *outage_start* ends."""
+    end = outage_start + timedelta(minutes=SLOT_MINUTES)
+    while slot_map.get(end) in ("OFF", "PROBABLY_OFF"):
+        end += timedelta(minutes=SLOT_MINUTES)
+    return end
+
+
+def _dt_to_local_hm(utc: datetime) -> str:
+    return dt_util.as_local(utc).strftime("%H:%M")
 
 
 async def async_setup_entry(
@@ -51,6 +62,8 @@ async def async_setup_entry(
         [
             EnergyMkStatusSensor(coordinator),
             EnergyMkNextOutageSensor(coordinator),
+            EnergyMkNextRestorationSensor(coordinator),
+            EnergyMkNextProbableOutageSensor(coordinator),
         ]
     )
 
@@ -109,21 +122,20 @@ class EnergyMkStatusSensor(CoordinatorEntity, SensorEntity):
                 )
         self._previous_state = new_state
 
-        slot_map: dict[int, str] = self.coordinator.data or {}
-        now = dt_util.now()
-        next_slot = _next_outage_slot(slot_map, _current_slot_id(now))
-        if next_slot is not None:
-            midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            outage_at = midnight + timedelta(minutes=(next_slot - 1) * SLOT_MINUTES)
-            self._schedule_warnings(outage_at)
+        slot_map: dict[datetime, str] = self.coordinator.data or {}
+        now_utc = dt_util.utcnow()
+        next_outage = _next_slot_of_type(slot_map, now_utc, ("OFF", "PROBABLY_OFF"))
+        if next_outage is not None:
+            self._schedule_warnings(dt_util.as_local(next_outage))
         else:
             self._cancel_warnings()
 
         super()._handle_coordinator_update()
 
     def _compute_state(self) -> str:
-        slot_map: dict[int, str] = self.coordinator.data or {}
-        return slot_map.get(_current_slot_id(dt_util.now()), "ON")
+        slot_map: dict[datetime, str] = self.coordinator.data or {}
+        current_dt = _floor_to_slot(dt_util.utcnow())
+        return slot_map.get(current_dt, "ON")
 
     @property
     def native_value(self) -> str:
@@ -131,45 +143,43 @@ class EnergyMkStatusSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        slot_map: dict[int, str] = self.coordinator.data or {}
+        slot_map: dict[datetime, str] = self.coordinator.data or {}
         windows: list[dict] = []
         if slot_map:
-            sorted_slots = sorted(slot_map.keys())
-            window_start = window_type = prev_slot = None
-            for slot_id in sorted_slots:
-                slot_type = slot_map[slot_id]
+            sorted_dts = sorted(slot_map.keys())
+            window_start = window_type = prev_dt = None
+            slot_dur = timedelta(minutes=SLOT_MINUTES)
+            for slot_dt in sorted_dts:
+                slot_type = slot_map[slot_dt]
                 if window_start is None:
-                    window_start, window_type, prev_slot = slot_id, slot_type, slot_id
-                elif slot_id == prev_slot + 1 and slot_type == window_type:
-                    prev_slot = slot_id
+                    window_start, window_type, prev_dt = slot_dt, slot_type, slot_dt
+                elif slot_dt == prev_dt + slot_dur and slot_type == window_type:
+                    prev_dt = slot_dt
                 else:
                     windows.append(
                         {
-                            "start": _slot_to_time(window_start),
-                            "end": _slot_to_time(prev_slot + 1),
+                            "start": _dt_to_local_hm(window_start),
+                            "end": _dt_to_local_hm(prev_dt + slot_dur),
                             "type": window_type,
                         }
                     )
-                    window_start, window_type, prev_slot = slot_id, slot_type, slot_id
+                    window_start, window_type, prev_dt = slot_dt, slot_type, slot_dt
             if window_start is not None:
                 windows.append(
                     {
-                        "start": _slot_to_time(window_start),
-                        "end": _slot_to_time(prev_slot + 1),
+                        "start": _dt_to_local_hm(window_start),
+                        "end": _dt_to_local_hm(prev_dt + slot_dur),
                         "type": window_type,
                     }
                 )
-        next_slot = _next_outage_slot(slot_map, _current_slot_id(dt_util.now()))
-        next_outage_time = _slot_to_time(next_slot) if next_slot is not None else None
         return {
             "schedule": windows,
             "queue": self.coordinator.queue_id,
-            "next_outage_time": next_outage_time,
         }
 
 
 class EnergyMkNextOutageSensor(CoordinatorEntity, SensorEntity):
-    """Start time of the next outage slot."""
+    """Start time of the next confirmed (OFF) outage slot."""
 
     _attr_icon = "mdi:clock-alert-outline"
     _attr_device_class = "timestamp"
@@ -183,11 +193,46 @@ class EnergyMkNextOutageSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> datetime | None:
-        slot_map: dict[int, str] = self.coordinator.data or {}
-        now = dt_util.now()
-        slot_id = _next_outage_slot(slot_map, _current_slot_id(now))
-        if slot_id is None:
+        slot_map: dict[datetime, str] = self.coordinator.data or {}
+        return _next_slot_of_type(slot_map, dt_util.utcnow(), ("OFF",))
+
+
+class EnergyMkNextRestorationSensor(CoordinatorEntity, SensorEntity):
+    """Time when power returns after the next confirmed outage block."""
+
+    _attr_icon = "mdi:clock-check-outline"
+    _attr_device_class = "timestamp"
+
+    def __init__(self, coordinator: EnergyMkCoordinator) -> None:
+        super().__init__(coordinator)
+        entry_id = coordinator.config_entry.entry_id
+        queue_name = QUEUE_NAMES.get(coordinator.queue_id, str(coordinator.queue_id))
+        self._attr_name = f"Energy MK {queue_name} Next Restoration"
+        self._attr_unique_id = f"{entry_id}_next_restoration"
+
+    @property
+    def native_value(self) -> datetime | None:
+        slot_map: dict[datetime, str] = self.coordinator.data or {}
+        next_outage = _next_slot_of_type(slot_map, dt_util.utcnow(), ("OFF",))
+        if next_outage is None:
             return None
-        minutes = (slot_id - 1) * SLOT_MINUTES
-        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return midnight + timedelta(minutes=minutes)
+        return _outage_block_end(slot_map, next_outage)
+
+
+class EnergyMkNextProbableOutageSensor(CoordinatorEntity, SensorEntity):
+    """Start time of the next possible (PROBABLY_OFF) outage slot."""
+
+    _attr_icon = "mdi:clock-question-outline"
+    _attr_device_class = "timestamp"
+
+    def __init__(self, coordinator: EnergyMkCoordinator) -> None:
+        super().__init__(coordinator)
+        entry_id = coordinator.config_entry.entry_id
+        queue_name = QUEUE_NAMES.get(coordinator.queue_id, str(coordinator.queue_id))
+        self._attr_name = f"Energy MK {queue_name} Next Probable Outage"
+        self._attr_unique_id = f"{entry_id}_next_probable_outage"
+
+    @property
+    def native_value(self) -> datetime | None:
+        slot_map: dict[datetime, str] = self.coordinator.data or {}
+        return _next_slot_of_type(slot_map, dt_util.utcnow(), ("PROBABLY_OFF",))

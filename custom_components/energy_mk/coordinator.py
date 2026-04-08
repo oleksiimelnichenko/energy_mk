@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_QUEUE_ID,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    SLOT_MINUTES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class EnergyMkCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=interval),
         )
 
-    async def _async_update_data(self) -> dict[int, str]:
+    async def _async_update_data(self) -> dict[datetime, str]:
         try:
             async with self._session.get(API_URL, timeout=15) as resp:
                 resp.raise_for_status()
@@ -43,14 +44,23 @@ class EnergyMkCoordinator(DataUpdateCoordinator):
         except Exception as err:
             raise UpdateFailed(f"Error fetching energy_mk schedule: {err}") from err
 
-        slot_map: dict[int, str] = {}
+        # Keyed by absolute UTC slot start time to avoid collisions across schedules
+        # that share the same 1-48 time_series_id numbering.
+        slot_map: dict[datetime, str] = {}
         schedules = data if isinstance(data, list) else data.get("schedules", [])
         for schedule in schedules:
+            from_str = schedule.get("from", "")
+            try:
+                from_utc = datetime.fromisoformat(from_str.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                _LOGGER.warning("energy_mk: cannot parse schedule from=%r", from_str)
+                continue
             for slot in schedule.get("series", []):
                 if slot.get("outage_queue_id") == self.queue_id:
                     slot_id = slot["time_series_id"]
                     slot_type = slot.get("type", "OFF")
-                    existing = slot_map.get(slot_id)
+                    slot_dt = from_utc + timedelta(minutes=(slot_id - 1) * SLOT_MINUTES)
+                    existing = slot_map.get(slot_dt)
                     if existing is None or existing == "PROBABLY_OFF":
-                        slot_map[slot_id] = slot_type
+                        slot_map[slot_dt] = slot_type
         return slot_map
