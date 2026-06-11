@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.claude/
+.ruff_cache/

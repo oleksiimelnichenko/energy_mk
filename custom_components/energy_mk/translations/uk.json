@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy MK — графік відключень",
+        "description": "Підключення до off.energy.mk.ua для відстеження графіка відключень електроенергії Миколаївщини для вашої черги.",
+        "data": {
+          "queue_id": "Черга відключень",
+          "scan_interval": "Інтервал оновлення (хвилини)",
+          "warning_intervals": "Попереджати до відключення"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не вдалося з'єднатися з off.energy.mk.ua — перевірте інтернет-з'єднання."
+    },
+    "abort": {
+      "already_configured": "Цю чергу вже налаштовано."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Налаштування Energy MK",
+        "data": {
+          "scan_interval": "Інтервал оновлення (хвилини)",
+          "warning_intervals": "Попереджати до відключення"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Статус"
+      },
+      "next_outage": {
+        "name": "Наступне відключення"
+      },
+      "next_restoration": {
+        "name": "Наступне відновлення"
+      },
+      "next_probable_outage": {
+        "name": "Наступне можливе відключення"
+      }
+    }
+  }
+}

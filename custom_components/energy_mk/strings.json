@@ -5,8 +5,9 @@
         "title": "Energy MK — outage schedule",
         "description": "Connect to off.energy.mk.ua to track the Mykolaiv power outage schedule for your queue.",
         "data": {
-          "queue_id": "Outage queue ID (number)",
-          "scan_interval": "Update interval (minutes)"
+          "queue_id": "Outage queue",
+          "scan_interval": "Update interval (minutes)",
+          "warning_intervals": "Warn before an outage"
         }
       }
     },
@@ -15,6 +16,33 @@
     },
     "abort": {
       "already_configured": "This queue is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Energy MK options",
+        "data": {
+          "scan_interval": "Update interval (minutes)",
+          "warning_intervals": "Warn before an outage"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status"
+      },
+      "next_outage": {
+        "name": "Next outage"
+      },
+      "next_restoration": {
+        "name": "Next restoration"
+      },
+      "next_probable_outage": {
+        "name": "Next probable outage"
+      }
     }
   }
 }
