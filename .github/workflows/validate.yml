@@ -21,6 +21,9 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # Custom-repository integration: not submitted to home-assistant/brands,
+          # which is only required for the default HACS store.
+          ignore: brands
 
   ruff:
     runs-on: ubuntu-latest
