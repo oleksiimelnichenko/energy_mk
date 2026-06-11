@@ -26,8 +26,8 @@ from .coordinator import EnergyMkCoordinator
 
 def _floor_to_slot(utc: datetime) -> datetime:
     """Round a UTC datetime down to the nearest slot boundary."""
-    slot_index = (utc.hour * 60 + utc.minute) // SLOT_MINUTES
-    return utc.replace(minute=slot_index * SLOT_MINUTES, second=0, microsecond=0)
+    floored = ((utc.hour * 60 + utc.minute) // SLOT_MINUTES) * SLOT_MINUTES
+    return utc.replace(hour=floored // 60, minute=floored % 60, second=0, microsecond=0)
 
 
 def _next_slot_of_type(
