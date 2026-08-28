@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import ClassVar
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
@@ -60,7 +61,7 @@ class EnergyMkStatusSensor(EnergyMkEntity):
 
     _attr_icon = "mdi:transmission-tower"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["ON", "OFF", "PROBABLY_OFF"]
+    _attr_options: ClassVar[list[str]] = ["ON", "OFF", "PROBABLY_OFF"]
 
     def __init__(self, coordinator: EnergyMkCoordinator) -> None:
         super().__init__(coordinator, "status")

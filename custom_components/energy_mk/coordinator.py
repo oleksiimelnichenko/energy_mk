@@ -1,8 +1,8 @@
 """Data update coordinator for Energy MK."""
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta
+import logging
 
 import aiohttp
 
