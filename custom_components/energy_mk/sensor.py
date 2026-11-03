@@ -16,7 +16,8 @@ from .const import DOMAIN, QUEUE_NAMES, SLOT_MINUTES
 from .coordinator import (
     CONFIRMED_OUTAGE_TYPES,
     EnergyMkCoordinator,
-    next_slot_of_type,
+    floor_to_slot,
+    next_block_start,
     outage_block_end,
 )
 
@@ -113,7 +114,11 @@ class EnergyMkStatusSensor(EnergyMkEntity):
 
 
 class EnergyMkNextOutageSensor(EnergyMkEntity):
-    """Start time of the next confirmed (OFF/SURE_OFF) outage slot."""
+    """Start of the next confirmed (OFF/SURE_OFF) outage block.
+
+    A block already in progress is skipped: during an outage this shows the
+    following outage, not the next slot of the current one.
+    """
 
     _attr_icon = "mdi:clock-alert-outline"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -124,11 +129,11 @@ class EnergyMkNextOutageSensor(EnergyMkEntity):
     @property
     def native_value(self) -> datetime | None:
         slot_map: dict[datetime, str] = self.coordinator.data or {}
-        return next_slot_of_type(slot_map, dt_util.utcnow(), CONFIRMED_OUTAGE_TYPES)
+        return next_block_start(slot_map, dt_util.utcnow(), CONFIRMED_OUTAGE_TYPES)
 
 
 class EnergyMkNextRestorationSensor(EnergyMkEntity):
-    """Time when power returns after the next confirmed outage block."""
+    """Time when power returns: end of the current outage, else of the next one."""
 
     _attr_icon = "mdi:clock-check-outline"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -139,14 +144,18 @@ class EnergyMkNextRestorationSensor(EnergyMkEntity):
     @property
     def native_value(self) -> datetime | None:
         slot_map: dict[datetime, str] = self.coordinator.data or {}
-        next_outage = next_slot_of_type(slot_map, dt_util.utcnow(), CONFIRMED_OUTAGE_TYPES)
+        now_utc = dt_util.utcnow()
+        current_slot = floor_to_slot(now_utc)
+        if slot_map.get(current_slot) in CONFIRMED_OUTAGE_TYPES:
+            return outage_block_end(slot_map, current_slot)
+        next_outage = next_block_start(slot_map, now_utc, CONFIRMED_OUTAGE_TYPES)
         if next_outage is None:
             return None
         return outage_block_end(slot_map, next_outage)
 
 
 class EnergyMkNextProbableOutageSensor(EnergyMkEntity):
-    """Start time of the next possible (PROBABLY_OFF) outage slot."""
+    """Start of the next possible (PROBABLY_OFF) block."""
 
     _attr_icon = "mdi:clock-question-outline"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -157,4 +166,4 @@ class EnergyMkNextProbableOutageSensor(EnergyMkEntity):
     @property
     def native_value(self) -> datetime | None:
         slot_map: dict[datetime, str] = self.coordinator.data or {}
-        return next_slot_of_type(slot_map, dt_util.utcnow(), ("PROBABLY_OFF",))
+        return next_block_start(slot_map, dt_util.utcnow(), ("PROBABLY_OFF",))

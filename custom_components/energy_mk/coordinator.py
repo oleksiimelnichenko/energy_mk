@@ -51,13 +51,22 @@ def floor_to_slot(utc: datetime) -> datetime:
     return utc.replace(hour=floored // 60, minute=floored % 60, second=0, microsecond=0)
 
 
-def next_slot_of_type(
+def next_block_start(
     slot_map: dict[datetime, str],
     after_utc: datetime,
     types: tuple[str, ...],
 ) -> datetime | None:
-    """Return the earliest future slot matching one of *types*, or None."""
-    candidates = [dt for dt, t in slot_map.items() if dt > after_utc and t in types]
+    """Return the start of the earliest block of *types* beginning after *after_utc*.
+
+    A block starts at a slot of *types* whose preceding slot is not of *types*,
+    so the remaining slots of a block already in progress are skipped.
+    """
+    slot_dur = timedelta(minutes=SLOT_MINUTES)
+    candidates = [
+        dt
+        for dt, t in slot_map.items()
+        if dt > after_utc and t in types and slot_map.get(dt - slot_dur) not in types
+    ]
     return min(candidates) if candidates else None
 
 
@@ -199,7 +208,7 @@ class EnergyMkCoordinator(DataUpdateCoordinator[dict[datetime, str]]):
     def _async_schedule_warnings(self) -> None:
         self._cancel_warnings()
         slot_map = self.data or {}
-        next_outage = next_slot_of_type(slot_map, dt_util.utcnow(), OUTAGE_TYPES)
+        next_outage = next_block_start(slot_map, dt_util.utcnow(), OUTAGE_TYPES)
         if next_outage is None:
             return
         outage_type = slot_map[next_outage]

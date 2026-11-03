@@ -53,15 +53,15 @@ Current slot state. States: `ON` · `OFF` · `SURE_OFF` · `PROBABLY_OFF`
 
 ### `sensor.energy_mk_<queue>_next_outage`
 
-Timestamp of the next confirmed (`OFF` or `SURE_OFF`) slot. `unknown` if none is scheduled.
+Start of the next confirmed (`OFF` or `SURE_OFF`) outage block. An outage already in progress is skipped, so during an outage this shows the following one. `unknown` if none is scheduled.
 
 ### `sensor.energy_mk_<queue>_next_restoration`
 
-Timestamp when power returns after the next confirmed outage block.
+Timestamp when power returns: the end of the current outage while one is in progress, otherwise the end of the next one. A trailing `PROBABLY_OFF` slot counts as part of the block.
 
 ### `sensor.energy_mk_<queue>_next_probable_outage`
 
-Timestamp of the next `PROBABLY_OFF` slot.
+Start of the next `PROBABLY_OFF` block.
 
 ## Events
 
