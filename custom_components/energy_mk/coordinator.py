@@ -31,7 +31,11 @@ _LOGGER = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
-OUTAGE_TYPES = ("OFF", "PROBABLY_OFF")
+# Slot types published by the API. SURE_OFF appeared on 2026-11-03 alongside
+# OFF; both are confirmed outages. Unknown future types are treated as OFF.
+CONFIRMED_OUTAGE_TYPES = ("OFF", "SURE_OFF")
+OUTAGE_TYPES = (*CONFIRMED_OUTAGE_TYPES, "PROBABLY_OFF")
+KNOWN_TYPES = ("ON", *OUTAGE_TYPES)
 
 
 def entry_option(entry: ConfigEntry, key: str, default):
@@ -90,6 +94,7 @@ class EnergyMkCoordinator(DataUpdateCoordinator[dict[datetime, str]]):
         self._previous_state: str | None = None
         self._boundary_unsub: CALLBACK_TYPE | None = None
         self._warning_unsubs: list[CALLBACK_TYPE] = []
+        self._unknown_types_logged: set[str] = set()
 
     async def _async_update_data(self) -> dict[datetime, str]:
         try:
@@ -123,6 +128,14 @@ class EnergyMkCoordinator(DataUpdateCoordinator[dict[datetime, str]]):
                 if slot.get("outage_queue_id") != self.queue_id:
                     continue
                 slot_type = slot.get("type", "OFF")
+                if slot_type not in KNOWN_TYPES:
+                    if slot_type not in self._unknown_types_logged:
+                        self._unknown_types_logged.add(slot_type)
+                        _LOGGER.warning(
+                            "energy_mk: unknown slot type %r, treating as OFF",
+                            slot_type,
+                        )
+                    slot_type = "OFF"
                 slot_dt = from_utc + timedelta(
                     minutes=(slot["time_series_id"] - 1) * SLOT_MINUTES
                 )
@@ -201,18 +214,26 @@ class EnergyMkCoordinator(DataUpdateCoordinator[dict[datetime, str]]):
                 self._warning_unsubs.append(
                     async_track_point_in_time(
                         self.hass,
-                        lambda _, m=minutes: self.hass.bus.async_fire(
-                            EVENT_OUTAGE_WARNING,
+                        self._make_warning_callback(
                             {
                                 "queue": self.queue_id,
-                                "minutes_before": m,
+                                "minutes_before": minutes,
                                 "type": outage_type,
                                 "outage_at": outage_at_local,
-                            },
+                            }
                         ),
                         fire_at,
                     )
                 )
+
+    def _make_warning_callback(self, payload: dict):
+        # Must be a @callback: a plain lambda is run by HA in an executor
+        # thread, where hass.bus.async_fire is not allowed.
+        @callback
+        def _fire(_now: datetime) -> None:
+            self.hass.bus.async_fire(EVENT_OUTAGE_WARNING, payload)
+
+        return _fire
 
     @callback
     def _async_schedule_boundary_tick(self) -> None:

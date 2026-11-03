@@ -13,7 +13,12 @@ import homeassistant.util.dt as dt_util
 
 from . import EnergyMkConfigEntry
 from .const import DOMAIN, QUEUE_NAMES, SLOT_MINUTES
-from .coordinator import EnergyMkCoordinator, next_slot_of_type, outage_block_end
+from .coordinator import (
+    CONFIRMED_OUTAGE_TYPES,
+    EnergyMkCoordinator,
+    next_slot_of_type,
+    outage_block_end,
+)
 
 
 def _dt_to_local_hm(utc: datetime) -> str:
@@ -61,7 +66,7 @@ class EnergyMkStatusSensor(EnergyMkEntity):
 
     _attr_icon = "mdi:transmission-tower"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options: ClassVar[list[str]] = ["ON", "OFF", "PROBABLY_OFF"]
+    _attr_options: ClassVar[list[str]] = ["ON", "OFF", "SURE_OFF", "PROBABLY_OFF"]
 
     def __init__(self, coordinator: EnergyMkCoordinator) -> None:
         super().__init__(coordinator, "status")
@@ -108,7 +113,7 @@ class EnergyMkStatusSensor(EnergyMkEntity):
 
 
 class EnergyMkNextOutageSensor(EnergyMkEntity):
-    """Start time of the next confirmed (OFF) outage slot."""
+    """Start time of the next confirmed (OFF/SURE_OFF) outage slot."""
 
     _attr_icon = "mdi:clock-alert-outline"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -119,7 +124,7 @@ class EnergyMkNextOutageSensor(EnergyMkEntity):
     @property
     def native_value(self) -> datetime | None:
         slot_map: dict[datetime, str] = self.coordinator.data or {}
-        return next_slot_of_type(slot_map, dt_util.utcnow(), ("OFF",))
+        return next_slot_of_type(slot_map, dt_util.utcnow(), CONFIRMED_OUTAGE_TYPES)
 
 
 class EnergyMkNextRestorationSensor(EnergyMkEntity):
@@ -134,7 +139,7 @@ class EnergyMkNextRestorationSensor(EnergyMkEntity):
     @property
     def native_value(self) -> datetime | None:
         slot_map: dict[datetime, str] = self.coordinator.data or {}
-        next_outage = next_slot_of_type(slot_map, dt_util.utcnow(), ("OFF",))
+        next_outage = next_slot_of_type(slot_map, dt_util.utcnow(), CONFIRMED_OUTAGE_TYPES)
         if next_outage is None:
             return None
         return outage_block_end(slot_map, next_outage)

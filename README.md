@@ -8,7 +8,7 @@ Requires Home Assistant **2024.11** or newer.
 
 ## Features
 
-- **Status sensor** — current 30-minute slot state: `ON`, `OFF`, or `PROBABLY_OFF` (enum sensor, updates exactly at slot boundaries, not just on poll)
+- **Status sensor** — current 30-minute slot state: `ON`, `OFF`, `SURE_OFF`, or `PROBABLY_OFF` (enum sensor, updates exactly at slot boundaries, not just on poll)
 - **Next outage / Next restoration / Next probable outage** — `timestamp` sensors for the next confirmed outage, when power returns after it, and the next possible outage
 - Consolidated outage windows exposed as attributes (start time, end time, type)
 - **Events** for automations: outage warnings, outage started, power restored
@@ -44,7 +44,7 @@ All sensors are grouped under one device per queue (e.g. **Energy MK 4.2**).
 
 ### `sensor.energy_mk_<queue>_status`
 
-Current slot state. States: `ON` · `OFF` · `PROBABLY_OFF`
+Current slot state. States: `ON` · `OFF` · `SURE_OFF` · `PROBABLY_OFF`
 
 | Attribute | Description |
 |-----------|-------------|
@@ -53,7 +53,7 @@ Current slot state. States: `ON` · `OFF` · `PROBABLY_OFF`
 
 ### `sensor.energy_mk_<queue>_next_outage`
 
-Timestamp of the next confirmed `OFF` slot. `unknown` if none is scheduled.
+Timestamp of the next confirmed (`OFF` or `SURE_OFF`) slot. `unknown` if none is scheduled.
 
 ### `sensor.energy_mk_<queue>_next_restoration`
 
@@ -68,7 +68,7 @@ Timestamp of the next `PROBABLY_OFF` slot.
 | Event | Payload | When |
 |-------|---------|------|
 | `energy_mk_outage_warning` | `queue`, `minutes_before`, `type`, `outage_at` | At each configured lead time before the next outage |
-| `energy_mk_outage_started` | `queue`, `state`, `restoration_at` | When the current slot turns `OFF`/`PROBABLY_OFF` |
+| `energy_mk_outage_started` | `queue`, `state`, `restoration_at` | When the current slot turns `OFF`/`SURE_OFF`/`PROBABLY_OFF` |
 | `energy_mk_power_restored` | `queue` | When the current slot turns back `ON` |
 
 Example automation trigger:
